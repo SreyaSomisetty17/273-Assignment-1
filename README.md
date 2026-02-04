@@ -1,64 +1,154 @@
-# Distributed System Lab
+# Distributed System Lab - CMPE 273
 
-This project demonstrates the core characteristics of a distributed system using two independent services that communicate over the network.
+This project demonstrates a tiny, locally distributed system with two independent services that communicate over HTTP, include comprehensive logging, and demonstrate independent failure handling.
 
-## Services
+## Architecture
 
-### Service A (Provider)
-- **Port**: 8081
-- **Endpoint**: `GET /api/data`
-- **Description**: Exposes a simple HTTP API that responds to requests from other services.
+### Service A (Echo API) - Port 8080
+- **GET /health** → `{"status":"ok"}`
+- **GET /echo?msg=hello** → `{"echo":"hello"}`
+- Role: Provider service that echoes back messages
 
-### Service B (Consumer)
-- **Port**: 8082
-- **Endpoint**: `GET /api/consume`
-- **Description**: Calls Service A over the network and handles failures gracefully when Service A is unavailable.
+### Service B (Client) - Port 8081
+- **GET /health** → `{"status":"ok"}`
+- **GET /call-echo?msg=hello** → Calls Service A `/echo` and returns combined response
+- Role: Consumer service that calls Service A with timeout handling
 
-## Prerequisites
 
-- Java 17 or higher
-- Maven 3.6 or higher
+## How to Run Locally
 
-## Building the Project
-
+### Step 1: Build the Project
 ```bash
 mvn clean compile
 ```
 
-## Running the Services
-
-### Start Service A
+### Step 2: Start Service A (Terminal 1)
 ```bash
 mvn spring-boot:run -pl service-a
 ```
+Wait for the message: "Started ServiceAApplication in X seconds"
 
-### Start Service B (in a separate terminal)
+### Step 3: Start Service B (Terminal 2)
 ```bash
 mvn spring-boot:run -pl service-b
 ```
+Wait for the message: "Started ServiceBApplication in X seconds"
 
 ## Testing
 
-### Normal Operation
-1. Start both services.
-2. Call Service B: `curl http://localhost:8082/api/consume`
-   - Should return: "Hello from Service A!"
+### Success Test (Both Services Running)
 
-### Failure Handling
-1. Stop Service A.
-2. Call Service B: `curl http://localhost:8082/api/consume`
-   - Should return: "Service A is unavailable"
+Test Service A health:
+```bash
+curl http://localhost:8080/health
+```
+Expected: `{"status":"ok"}`
 
-## Key Features
+Test Service A echo:
+```bash
+curl "http://localhost:8080/echo?msg=hello"
+```
+Expected: `{"echo":"hello"}`
 
-- **Independent Processes**: Services run as separate processes.
-- **Network Communication**: Services communicate via HTTP over the network.
-- **Failure Propagation**: Demonstrates how failures propagate across service boundaries.
-- **Logging**: Basic logging to show request/response flow.
-- **Graceful Degradation**: Service B handles Service A unavailability gracefully.
+Test Service B health:
+```bash
+curl http://localhost:8081/health
+```
+Expected: `{"status":"ok"}`
 
-## Architecture
+Test Service B calling Service A:
+```bash
+curl "http://localhost:8081/call-echo?msg=hello"
+```
+Expected: 
+```json
+{
+  "service_a_response": {"echo":"hello"},
+  "service_b_message": "Successfully called Service A",
+  "total_latency_ms": 45
+}
+```
 
-- Both services run on the same machine but on different ports.
-- Service B makes HTTP calls to Service A.
-- If Service A is down, Service B returns a fallback message instead of crashing.
+### Failure Test (Service A Down)
+
+1. Stop Service A (Ctrl+C in Terminal 1)
+2. Call Service B:
+```bash
+curl "http://localhost:8081/call-echo?msg=hello"
+```
+Expected HTTP 503 response:
+```json
+{
+  "error": "Service A is unavailable",
+  "message": "Failed to connect to Service A: ..."
+}
+```
+
+Check logs in Terminal 2 - you should see error logs like:
+```
+[Service-B] Failed to call Service A after XXms: I/O error on GET request...
+[Service-B] Endpoint: /call-echo, Status: 503, Latency: XXms, Error: ...
+```
+
+## Logging Features
+
+Both services log:
+- **Service Name**: [Service-A] or [Service-B]
+- **Endpoint**: The API endpoint being called
+- **Status**: HTTP status code (200, 503, etc.)
+- **Latency**: Time taken in milliseconds
+- **Error Details**: When failures occur
+
+## Success + Failure Proof
+
+### ✅ Success Test Output (Both Services Running)
+```bash
+$ curl "http://localhost:8081/call-echo?msg=hello"
+{
+  "service_b_message": "Successfully called Service A",
+  "service_a_response": {"echo":"hello"},
+  "total_latency_ms": 25
+}
+```
+
+**Service B Logs:**
+```
+2026-02-04 10:20:19.173 [http-nio-8081-exec-2] INFO  [Service-B] Endpoint: /call-echo, Status: Starting, Message: hello
+2026-02-04 10:20:19.173 [http-nio-8081-exec-2] INFO  [Service-B] Calling Service A at: http://localhost:8080/echo?msg=hello
+2026-02-04 10:20:19.198 [http-nio-8081-exec-2] INFO  [Service-B] Successfully received response from Service A, Latency: 25ms
+2026-02-04 10:20:19.198 [http-nio-8081-exec-2] INFO  [Service-B] Endpoint: /call-echo, Status: 200, Latency: 25ms
+```
+
+### ❌ Failure Test Output (Service A Stopped)
+```bash
+$ curl -i "http://localhost:8081/call-echo?msg=hello"
+HTTP/1.1 503 
+Content-Type: application/json
+
+{
+  "error": "Service A is unavailable",
+  "message": "Failed to connect to Service A: I/O error on GET request for \"http://localhost:8080/echo\": Connection refused"
+}
+```
+
+**Service B Logs:**
+```
+2026-02-04 10:20:31.049 [http-nio-8081-exec-4] INFO  [Service-B] Endpoint: /call-echo, Status: Starting, Message: hello
+2026-02-04 10:20:31.050 [http-nio-8081-exec-4] INFO  [Service-B] Calling Service A at: http://localhost:8080/echo?msg=hello
+2026-02-04 10:20:31.052 [http-nio-8081-exec-4] ERROR [Service-B] Failed to call Service A after 2ms: Connection refused
+2026-02-04 10:20:31.052 [http-nio-8081-exec-4] ERROR [Service-B] Endpoint: /call-echo, Status: 503, Latency: 3ms
+```
+
+## What Makes This Distributed?
+
+This system is distributed because Service A and Service B run as independent processes that communicate only through network messages over HTTP, experiencing real network latency and the possibility of communication failures. Each service can fail independently—when Service A goes down, Service B continues operating and gracefully handles the failure by returning a 503 error rather than crashing. The services do not share memory or state; all coordination happens via the network, with Service B implementing a 5-second timeout to protect against slow or unresponsive calls. This architecture mirrors real-world microservices that run in separate containers or on different machines, demonstrating fundamental distributed system properties: independent failure domains, network-based communication, partial failures, and timeout protection.
+
+## Additional Documentation
+
+- **[TESTING_OUTPUT.md](TESTING_OUTPUT.md)**: Detailed test results showing success and failure scenarios with actual curl commands and responses
+- **[DEBUGGING_GUIDE.md](DEBUGGING_GUIDE.md)**: Comprehensive guide answering:
+  - What happens on timeout?
+  - What happens if Service A is down?
+  - What do your logs show, and how would you debug?
+- **[test-script.sh](test-script.sh)**: Automated test script for quick validation
+
