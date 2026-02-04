@@ -110,6 +110,7 @@ $ curl "http://localhost:8081/call-echo?msg=hello"
   "total_latency_ms": 25
 }
 ```
+<img width="426" height="126" alt="image" src="https://github.com/user-attachments/assets/914232e0-b338-45ca-aa03-238da2c2faf2" />
 
 **Service B Logs:**
 ```
@@ -118,6 +119,7 @@ $ curl "http://localhost:8081/call-echo?msg=hello"
 2026-02-04 10:20:19.198 [http-nio-8081-exec-2] INFO  [Service-B] Successfully received response from Service A, Latency: 25ms
 2026-02-04 10:20:19.198 [http-nio-8081-exec-2] INFO  [Service-B] Endpoint: /call-echo, Status: 200, Latency: 25ms
 ```
+<img width="907" height="62" alt="image" src="https://github.com/user-attachments/assets/262ae7f9-3e80-433b-bc7c-b2507862cc28" />
 
 ### ❌ Failure Test Output (Service A Stopped)
 ```bash
@@ -130,6 +132,8 @@ Content-Type: application/json
   "message": "Failed to connect to Service A: I/O error on GET request for \"http://localhost:8080/echo\": Connection refused"
 }
 ```
+<img width="892" height="152" alt="image" src="https://github.com/user-attachments/assets/a2e5cfe6-e8e0-4fce-9725-4ce80022c50b" />
+
 
 **Service B Logs:**
 ```
@@ -138,6 +142,7 @@ Content-Type: application/json
 2026-02-04 10:20:31.052 [http-nio-8081-exec-4] ERROR [Service-B] Failed to call Service A after 2ms: Connection refused
 2026-02-04 10:20:31.052 [http-nio-8081-exec-4] ERROR [Service-B] Endpoint: /call-echo, Status: 503, Latency: 3ms
 ```
+<img width="894" height="59" alt="image" src="https://github.com/user-attachments/assets/50e38fcf-6dfd-4385-8afb-d6d317fe785e" />
 
 ## What Makes This Distributed?
 
